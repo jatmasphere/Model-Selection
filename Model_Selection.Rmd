@@ -30,20 +30,25 @@ library(MuMIn)
 ```{r include = FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
-\
-Much of this material is from James Santangelo:
-https://uoftcoders.github.io/rcourse/
 
-Excellent video here:
-https://www.youtube.com/watch?v=7XAHjm6Vy5k
+Dataset: Harrower, William L.; Srivastava, Diane S.; Turkington, Roy; Fraser, Lauchlan H. (2018), Data from: Temperate grassland songbird species accumulate incrementally along a gradient of primary productivity, Dryad, Dataset, https://doi.org/10.5061/dryad.365dr
 
 ## Background
+
+Goal is to find the more parsimonious model: aka simplest yet most accurate model. Easier to interpret and explain a simpler model than a complicated one. 
+
+One thing we want to watch out for more than co-linearity is multicolinearity. (washburn dataset)
+
+VIF = Variance of Inflation / Tolerance
+
+
 
 ```{r}
 grass<-read.csv("data/grass_data.csv")
 ```
 The data includes two response variables; block and transect
 The data includes five predictor variables: elevation, ndvi, live, dead, ground
+(Normalized Difference Vegetation Index (NDVI))
 
 **Multiple competing hypotheses**, with each hypothesis being represented in a separate model.
 1. It does not rely on a single model.
@@ -56,34 +61,97 @@ pairs(grass[,5:9], lower.panel = NULL) #use all rows of columns including predic
 ```
     
 Elevation and ndvi look closely related, and some of the others look fairly linear, which means they are very likely redundant information representing the same phenomenon.
+All of the combinations with percent ground cover look promising, so I'll focus on that in my analysis. 
 
 ```{r}
-# change na. action
-options(na.action = "na.fail")
+grassmodel <- lm(density ~ elevation + ndvi + live + dead + ground, data=grass)
+anova (grassmodel) #coefficients of the full model
 ```
 
-Let’s fit four candidate models that explain variation in grassland bird density. Ideally, these models would represent hypotheses. Given the nature of the response, we’ll use ordinary linear regression with the `lm` function.
+Using the performance-collinearity check function, we can check our data for multicollinearity:
+```{r}
+performance::check_collinearity(grassmodel)
+```
+
+Four of the five predictors show a low correlation, while the fifth (ndvi) shows a moderate correlation. What this means is that the ndvi variable may have an interactive effect going on, whereas the other variables are more independent. 
+
+Next, I'm going to dredge the model to run all possible variable combinations. This helps decide which combos to run actual analysis on. All should add up to "1" (weight). I want to run my analysis on the models that have less than 2.0 model units from the top-rated model (delta 0.0). These ones have the most "competitive explanatory power".
+
+When model is dredged, it will show sum of weight and # containing models. Variables with more inclusions may be stronger/more likely to be included/have some kind of effect.
+
+Pairwise comparison figures can help show the relationships between the different variables.
+
+```{r}
+options(na.action = "na.fail") # otherwise blows up with NA values
+dredge_grass<-dredge(grassmodel)
+dredge_grass
+```
+There are 32 possible models based on additive combinations of variables (no interaction terms).
+
+I'm going to subset these model and isolate the top competitive model combinations:
+```{r}
+#grab equally competitive models
+subset(dredge_grass, delta <2)
+```
+
+There are five models that could be considered equally competitive (having explanatory power that is indistinguishable). Checking to see which variables are most influential:
+```{r}
+importance(dredge_grass)
+```
+Elevation and ndvi are equally ranked with having the highest explanatory power, but percent dead vegetation and percent ground cover are also fairly close. Percent live vegetation is a bit lower, but still now very much lower.
+
+Just taking a look at each predictor variable against the response variable (density):
+```{r}
+g1 <- ggplot(grassmodel, aes(elevation, density)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+  #scale_x_continuous(limits = c(0, 700))
+
+g2 <- ggplot(grassmodel, aes(ndvi, density)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+
+g3 <- ggplot(grassmodel, aes(live, density)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+
+g4 <- ggplot(grassmodel, aes(dead, density)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+
+g5 <- ggplot(grassmodel, aes(ground, density)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+
+g1 
+g2
+g3
+g4
+g5
+```
+Based on these top 5 candidate models, I can now run my linear models including these individual and additive variables.
+
+I'll fit the candidate models that will likely best explain any variation in grassland bird density. Ideally, these models would represent hypotheses. 
+Given the nature of the response, we’ll use ordinary linear regression with the `lm` function.
 ```{r}
 #First, fit 4 candidate linear models to explain variation in density
-mod1<-lm(density~elevation+ndvi, data = grass)
-mod2<-lm(density~live+dead, data = grass)
-mod3<-lm(density~live+ground, data = grass)
-mod4<-lm(density~elevation+live+ndvi, data = grass)
+mod1<-lm(density~elevation, data = grass)
+mod2<-lm(density~ndvi, data = grass)
+mod3<-lm(density~ndvi+dead, data = grass)
+mod4<-lm(density~elevation+dead, data = grass)
+mod5<-lm(density~ground, data = grass)
 ```
 We can now use the `model.sel` function to conduct model selection. The default model selection criteria is Akaike’s information criteria (AIC) with small sample bias adjustment, AIC~c~. Here we’ll create an object `out.put` that contains all of the model selection information.
 ```{r}
 # use the model.sel function to conduct model selection
-out.put<-model.sel(mod1,mod2,mod3,mod4)
+out.put<-model.sel(mod1,mod2,mod3,mod4,mod5)
 out.put
 ```
 The models are sorted from best (top) to worst (bottom). Looks like `mod1`, containing an intercept (Int), distance (dst), and elevation(elev) is best with a weight of 0.72. It is 0.72/0.264 = 2.72 times more likely to be the best explanation (hypothesis) for variation in density. 
 
-```{r create subset of all models}
-# create a confidence set of models using the subset function
-# select models with delta AICc less than 5
-# IMPORTANT: Weights have been renormalized!!
-subset(out.put, delta <5)
-```
+
+
+
 ```{r Royall}
 # select models using Royall's 1/8 rule for strength of evidence
 #https://www.stat.fi/isi99/proceedings/arkisto/varasto/roya0578.pdf
@@ -95,6 +163,8 @@ subset(out.put, 1/8 < weight/max(out.put$weight))
 # IMPORTANT: Weights have been renormalized!!
 subset(out.put, cumsum(out.put$weight) <= .95)
 ```
+.576/.217 and .207 = model 1 is 2.65% more likely than model 3 (and then mod 4)
+
 ```{r adjusting sig digits}
 # coerce the object out.put into a data frame
 # elements 6-10 in out.put have what we want
@@ -117,18 +187,6 @@ sel.table<-sel.table[,c(6,1,2,3,4,5)] #specify order of columns
 sel.table
 ```
 
-```{r}
-# model selection table; sorted by BIC
-model.sel(mod1,mod2,mod3,mod4, rank = BIC)
-```
-```{r}
-#consistent AIC with Fishers information matrix
-model.sel(mod1,mod2,mod3,mod4, rank = CAICF) 
-```
-```{r compare models with AIC}
-#AIC
-AIC(mod1,mod2)
-```
 ```{r Importance weights for individual predictor variables}
 # Importance weights for individual predictor variables
 # calculated using the importance function
