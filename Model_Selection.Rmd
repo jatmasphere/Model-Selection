@@ -1,0 +1,159 @@
+---
+title: "Introduction to Model Selection"
+#subtitle: Jenna Atma
+output:
+  html_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+packages_needed <- c("ggplot2", # graphics
+                     "dplyr",
+                     "lme4", # display() etc.
+                     "lmerTest",
+                     "MuMIn"
+                     )
+pk_to_install <- packages_needed [!( packages_needed %in% rownames(installed.packages())  )]
+if(length(pk_to_install)>0 ){
+  install.packages(pk_to_install,repos="http://cran.r-project.org")
+}
+#lapply(packages_needed, require, character.only = TRUE)
+library(ggplot2)
+library(dplyr)
+library(lme4)
+library(lmerTest)
+library(ggfortify)
+library(MuMIn)
+```
+
+```{r include = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+\
+Much of this material is from James Santangelo:
+https://uoftcoders.github.io/rcourse/
+
+Excellent video here:
+https://www.youtube.com/watch?v=7XAHjm6Vy5k
+
+## Background
+
+```{r}
+grass<-read.csv("data/grass_data.csv")
+```
+The data includes two response variables; block and transect
+The data includes five predictor variables: elevation, ndvi, live, dead, ground
+
+**Multiple competing hypotheses**, with each hypothesis being represented in a separate model.
+1. It does not rely on a single model.
+2. Models can be ranked and weighted according to their fit to the observed data.
+3. The best supported models can be averaged to get parameter estimates
+
+```{r fig.height=8, fig.width=8}
+#check for co-linearity among the four predictor variables
+pairs(grass[,5:9], lower.panel = NULL) #use all rows of columns including predictor variables
+```
+    
+Elevation and ndvi look closely related, and some of the others look fairly linear, which means they are very likely redundant information representing the same phenomenon.
+
+```{r}
+# change na. action
+options(na.action = "na.fail")
+```
+
+Let’s fit four candidate models that explain variation in grassland bird density. Ideally, these models would represent hypotheses. Given the nature of the response, we’ll use ordinary linear regression with the `lm` function.
+```{r}
+#First, fit 4 candidate linear models to explain variation in density
+mod1<-lm(density~elevation+ndvi, data = grass)
+mod2<-lm(density~live+dead, data = grass)
+mod3<-lm(density~live+ground, data = grass)
+mod4<-lm(density~elevation+live+ndvi, data = grass)
+```
+We can now use the `model.sel` function to conduct model selection. The default model selection criteria is Akaike’s information criteria (AIC) with small sample bias adjustment, AIC~c~. Here we’ll create an object `out.put` that contains all of the model selection information.
+```{r}
+# use the model.sel function to conduct model selection
+out.put<-model.sel(mod1,mod2,mod3,mod4)
+out.put
+```
+The models are sorted from best (top) to worst (bottom). Looks like `mod1`, containing an intercept (Int), distance (dst), and elevation(elev) is best with a weight of 0.72. It is 0.72/0.264 = 2.72 times more likely to be the best explanation (hypothesis) for variation in density. 
+
+```{r create subset of all models}
+# create a confidence set of models using the subset function
+# select models with delta AICc less than 5
+# IMPORTANT: Weights have been renormalized!!
+subset(out.put, delta <5)
+```
+```{r Royall}
+# select models using Royall's 1/8 rule for strength of evidence
+#https://www.stat.fi/isi99/proceedings/arkisto/varasto/roya0578.pdf
+# IMPORTANT: Weights have been renormalized!!
+subset(out.put, 1/8 < weight/max(out.put$weight))
+```
+```{r}
+# select models 95% cumulative weight criteria
+# IMPORTANT: Weights have been renormalized!!
+subset(out.put, cumsum(out.put$weight) <= .95)
+```
+```{r adjusting sig digits}
+# coerce the object out.put into a data frame
+# elements 6-10 in out.put have what we want
+sel.table<-as.data.frame(out.put)[6:10]
+sel.table
+# how about a little renaming columns to fit proper conventions
+# number of parameters (df) should be K
+names(sel.table)[1] = "K"
+
+## lets be sure to put the model names in a column
+sel.table$Model<-rownames(sel.table)
+
+# let's see what is in there
+sel.table
+```
+
+```{r reorder columns}
+#little reordering of columns
+sel.table<-sel.table[,c(6,1,2,3,4,5)] #specify order of columns
+sel.table
+```
+
+```{r}
+# model selection table; sorted by BIC
+model.sel(mod1,mod2,mod3,mod4, rank = BIC)
+```
+```{r}
+#consistent AIC with Fishers information matrix
+model.sel(mod1,mod2,mod3,mod4, rank = CAICF) 
+```
+```{r compare models with AIC}
+#AIC
+AIC(mod1,mod2)
+```
+```{r Importance weights for individual predictor variables}
+# Importance weights for individual predictor variables
+# calculated using the importance function
+importance(out.put)
+```
+```{r make a figure using best-fit model}
+p1 <- ggplot(grass, aes(elevation, density, color = elevation)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+
+p2 <- ggplot(grass, aes(ndvi, density, color = ndvi)) + 
+  geom_point() +
+  geom_smooth(method="lm") +
+  scale_colour_gradientn(colours = terrain.colors(10, rev=TRUE))
+
+p1
+p2
+```
+
+## Caveats and Limitations to Model Selection
+
+1. Depends on the models included in the candidate set. You can’t identify a model as being the “best” fit to the data if you didn’t include the model to begin with!  
+\
+2. The parameter estimates and predictions arising from the “best” model or set of best models should be biologically meaningful.  
+\
+3. Need to decide whether to use model selection or common inferential statistics (e.g. based on P-values). Techniques that rely on both approaches are possible (e.g. backward variable selection followed by averaging of top models) but are discouraged by some model-selection purists.  
+\
+4. Difficult or impossible to compare models with different assumptions, such as those with different error structures (e.g., Poisson vs. Binomial data).  
