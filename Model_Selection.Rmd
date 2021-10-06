@@ -1,5 +1,5 @@
 <body style="background-color:#e7d5ad"> 
-
+<center>![caption](images/sitephoto.png){width=80%}</center>
 ---
 title: "Introduction to Model Selection"
 #subtitle: Jenna Atma
@@ -13,8 +13,11 @@ knitr::opts_chunk$set(echo = TRUE)
 packages_needed <- c("ggplot2", # graphics
                      "dplyr",
                      "lme4", # display() etc.
-                     "lmerTest",
-                     "MuMIn"
+                     "lmerTest", #gives us P-values
+                     "MuMIn", #models selection
+                     "GGally", #to make pairs plot
+                     "performance", #model diagnostics
+                     "patchwork"
                      )
 pk_to_install <- packages_needed [!( packages_needed %in% rownames(installed.packages())  )]
 if(length(pk_to_install)>0 ){
@@ -27,6 +30,9 @@ library(lme4)
 library(lmerTest)
 library(ggfortify)
 library(MuMIn)
+library(GGally)
+library(performance)
+library(patchwork)
 ```
 
 ```{r include = FALSE}
@@ -37,27 +43,27 @@ Dataset: Harrower, William L.; Srivastava, Diane S.; Turkington, Roy; Fraser, La
 
 ## Background
 
-<center>![caption](images/wmeadowlark.jpeg){width=90%}</center>
+<center>![caption](images/wmeadowlark.jpeg){width=80%}</center>
+  
+Global analyses of bird communities along elevation gradients suggest that bird diversity on arid mountains is primarily limited by water availability, not temperature or altitude. However, the mechanism by which water availability, and subsequently primary productivity, increases bird diversity is still unclear. Here we evaluate two possible mechanisms from species-energy theory. The more individuals hypothesis proposes that a higher availability of resources increases the total number of individuals that can be supported, and therefore the greater number of species that will be sampled. By contrast, the more specialization hypothesis proposes that increasing resource availability will permit specialists to exploit otherwise rare resources, thus increasing total diversity. 
+  
+This study was conducted with 5 years of surveys of grassland songbird communities along an elevational gradient in British Columbia, Canada:
 
-Goal is to find the more parsimonious model: aka simplest yet most accurate model. Easier to interpret and explain a simpler model than a complicated one. 
+<center>![caption](images/largemap.png){width=80%}
+![caption](images/site.png){width=80%}</center>
 
-One thing we want to watch out for more than co-linearity is multicolinearity. (washburn dataset)
-
-VIF = Variance of Inflation / Tolerance
-
-
+Using model selection with AIC values can help find the most parsimonious model: in other words, the simplest yet most accurate model to describe these data. 
 
 ```{r}
 grass<-read.csv("data/grass_data.csv")
 ```
-The data includes two response variables; block and transect
-The data includes five predictor variables: elevation, ndvi, live, dead, ground
-(Normalized Difference Vegetation Index (NDVI))
+Two response variables: diversity (number of species per survey point) and density (number of individuals per survey point)
+Five predictor variables: elevation, NDVI (Normalized Difference Vegetation Index), live (percent live plant cover), dead (percent dead plant cover), and ground (percent ground cover).
 
-**Multiple competing hypotheses**, with each hypothesis being represented in a separate model.
-1. It does not rely on a single model.
-2. Models can be ranked and weighted according to their fit to the observed data.
-3. The best supported models can be averaged to get parameter estimates
+
+## Visualizing the Data
+
+Using the pairs function, the multiple competing hypotheses are plotted out, with each hypothesis being represented in a separate model.
 
 ```{r fig.height=8, fig.width=8}
 #check for co-linearity among the four predictor variables
@@ -77,7 +83,7 @@ Using the performance-collinearity check function, we can check our data for mul
 performance::check_collinearity(grassmodel)
 ```
 
-Four of the five predictors show a low correlation, while the fifth (ndvi) shows a moderate correlation. What this means is that the ndvi variable may have an interactive effect going on, whereas the other variables are more independent. 
+All five predictors show a low correlation. 
 
 Next, I'm going to dredge the model to run all possible variable combinations. This helps decide which combos to run actual analysis on. All should add up to "1" (weight). I want to run my analysis on the models that have less than 2.0 model units from the top-rated model (delta 0.0). These ones have the most "competitive explanatory power".
 
@@ -95,14 +101,17 @@ There are 32 possible models based on additive combinations of variables (no int
 I'm going to subset these model and isolate the top competitive model combinations:
 ```{r}
 #grab equally competitive models
-subset(dredge_grass, delta <2)
+subset(dredge_grass, delta <3)
 ```
 
-There are five models that could be considered equally competitive (having explanatory power that is indistinguishable). Checking to see which variables are most influential:
+There are 6 models that could be considered at least close to being equally competitive (having explanatory power that is indistinguishable). The top three models are all more or less within 2 AIC units of each other.
+  
+Checking to see which variables are most influential:
+
 ```{r}
 importance(dredge_grass)
 ```
-Elevation and ndvi are equally ranked with having the highest explanatory power, but percent dead vegetation and percent ground cover are also fairly close. Percent live vegetation is a bit lower, but still now very much lower.
+Percent ground cover, percent live plant cover, and elevation all have fairly high-ranking explanatory power, but NDVI and percent dead plant cover aren't too far off. All of them are involved in the same number of models.
 
 Just taking a look at each predictor variable against the response variable (density):
 ```{r, out.width="50%"}
@@ -134,28 +143,23 @@ g3
 g4
 g5
 ```
-Based on these top 5 candidate models, I can now run my linear models including these individual and additive variables.
+Based on the top 3 candidate models, I can now run my linear models including these individual and additive variables.
 
 I'll fit the candidate models that will likely best explain any variation in grassland bird density. Ideally, these models would represent hypotheses. 
 Given the nature of the response, we’ll use ordinary linear regression with the `lm` function.
 ```{r}
 #First, fit 4 candidate linear models to explain variation in density
-mod1<-lm(density~elevation, data = grass)
-mod2<-lm(density~ndvi, data = grass)
-mod3<-lm(density~ndvi+dead, data = grass)
-mod4<-lm(density~elevation+dead, data = grass)
-mod5<-lm(density~ground, data = grass)
+mod1<-lm(density~elevation+ground+live, data = grass)
+mod2<-lm(density~elevation+ground+live+dead, data = grass)
+mod3<-lm(density~elevation+ground+live+ndvi, data = grass)
 ```
 We can now use the `model.sel` function to conduct model selection. The default model selection criteria is Akaike’s information criteria (AIC) with small sample bias adjustment, AIC~c~. Here we’ll create an object `out.put` that contains all of the model selection information.
 ```{r}
 # use the model.sel function to conduct model selection
-out.put<-model.sel(mod1,mod2,mod3,mod4,mod5)
+out.put<-model.sel(mod1,mod2,mod3)
 out.put
 ```
-The models are sorted from best (top) to worst (bottom). Looks like `mod1`, containing an intercept (Int), distance (dst), and elevation(elev) is best with a weight of 0.72. It is 0.72/0.264 = 2.72 times more likely to be the best explanation (hypothesis) for variation in density. 
-
-
-
+The models are sorted from best (top) to worst (bottom). Looks like `mod1`, containing an intercept, elevation, percent ground cover, and percent live cover is best with a weight of 0.568. It is 0.586/0.211 = 2.78 times more likely to be the best explanation (hypothesis) for variation in density. When comparing the best model to the third-best model, we get 0.586/0.203 = 2.89 times more likely to be the best explanation (hypothesis).
 
 ```{r Royall}
 # select models using Royall's 1/8 rule for strength of evidence
@@ -163,12 +167,14 @@ The models are sorted from best (top) to worst (bottom). Looks like `mod1`, cont
 # IMPORTANT: Weights have been renormalized!!
 subset(out.put, 1/8 < weight/max(out.put$weight))
 ```
+Using the 1/8 rule for strength of evidence, we can see that the delta values and weights agree with each other.
+
 ```{r}
 # select models 95% cumulative weight criteria
 # IMPORTANT: Weights have been renormalized!!
 subset(out.put, cumsum(out.put$weight) <= .95)
 ```
-.576/.217 and .207 = model 1 is 2.65% more likely than model 3 (and then mod 4)
+0.735/0.265 = model 1 is 2.77% more likely than model 2.
 
 ```{r adjusting sig digits}
 # coerce the object out.put into a data frame
