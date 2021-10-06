@@ -1,3 +1,5 @@
+<body style="background-color:#e7d5ad"> 
+
 ---
 title: "Introduction to Model Selection"
 #subtitle: Jenna Atma
@@ -34,6 +36,8 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 Dataset: Harrower, William L.; Srivastava, Diane S.; Turkington, Roy; Fraser, Lauchlan H. (2018), Data from: Temperate grassland songbird species accumulate incrementally along a gradient of primary productivity, Dryad, Dataset, https://doi.org/10.5061/dryad.365dr
 
 ## Background
+
+<center>![caption](images/wmeadowlark.jpeg){width=90%}</center>
 
 Goal is to find the more parsimonious model: aka simplest yet most accurate model. Easier to interpret and explain a simpler model than a complicated one. 
 
@@ -101,15 +105,16 @@ importance(dredge_grass)
 Elevation and ndvi are equally ranked with having the highest explanatory power, but percent dead vegetation and percent ground cover are also fairly close. Percent live vegetation is a bit lower, but still now very much lower.
 
 Just taking a look at each predictor variable against the response variable (density):
-```{r}
-g1 <- ggplot(grassmodel, aes(elevation, density)) + 
+```{r, out.width="50%"}
+g1 <- ggplot(grassmodel, aes(elevation, density, color = elevation)) + 
   geom_point() +
-  geom_smooth(method="lm")
-  #scale_x_continuous(limits = c(0, 700))
+  geom_smooth(method="lm") +
+  scale_colour_gradientn(colors = heat.colors(10, rev=TRUE))
 
-g2 <- ggplot(grassmodel, aes(ndvi, density)) + 
+g2 <- ggplot(grassmodel, aes(ndvi, density, color = ndvi)) + 
   geom_point() +
-  geom_smooth(method="lm")
+  geom_smooth(method="lm") +
+  scale_colour_gradientn(colors = terrain.colors(10, rev=TRUE))
 
 g3 <- ggplot(grassmodel, aes(live, density)) + 
   geom_point() +
@@ -187,24 +192,7 @@ sel.table<-sel.table[,c(6,1,2,3,4,5)] #specify order of columns
 sel.table
 ```
 
-```{r Importance weights for individual predictor variables}
-# Importance weights for individual predictor variables
-# calculated using the importance function
-importance(out.put)
-```
-```{r make a figure using best-fit model}
-p1 <- ggplot(grass, aes(elevation, density, color = elevation)) + 
-  geom_point() +
-  geom_smooth(method="lm")
-
-p2 <- ggplot(grass, aes(ndvi, density, color = ndvi)) + 
-  geom_point() +
-  geom_smooth(method="lm") +
-  scale_colour_gradientn(colours = terrain.colors(10, rev=TRUE))
-
-p1
-p2
-```
+<center>![caption](images/vespersparrow.jpeg){width=90%}</center>
 
 ## Caveats and Limitations to Model Selection
 
