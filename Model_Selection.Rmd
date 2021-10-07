@@ -117,35 +117,7 @@ importance(dredge_grass)
 ```
 Percent ground cover, percent live plant cover, and elevation all have fairly high-ranking explanatory power, but NDVI and percent dead plant cover aren't too far off. All of them are involved in the same number of models.
 
-Just taking a look at each predictor variable against the response variable (density):
-```{r, out.width="50%", fig.align="center"}
-g1 <- ggplot(grassmodel, aes(elevation, density, color = elevation)) + 
-  geom_point() +
-  geom_smooth(method="lm") 
 
-g2 <- ggplot(grassmodel, aes(ndvi, density, color = ndvi)) + 
-  geom_point() +
-  geom_smooth(method="lm") 
-
-g3 <- ggplot(grassmodel, aes(live, density, color = live)) + 
-  geom_point() +
-  geom_smooth(method="lm")
-
-g4 <- ggplot(grassmodel, aes(dead, density, color = dead)) + 
-  geom_point() +
-  geom_smooth(method="lm")
-
-g5 <- ggplot(grassmodel, aes(ground, density, color = ground)) + 
-  geom_point() +
-  geom_smooth(method="lm")
-
-g1 
-g2
-g3
-g4
-g5
-```
-Based on the top 3 candidate models, I can now run my linear models including these individual and additive variables.
 
 ## Running the Actual Model
 
@@ -164,28 +136,19 @@ out.put
 ```
 The models are sorted from best (top) to worst (bottom). Looks like `mod1`, containing an intercept, elevation, percent ground cover, and percent live cover is best with a weight of 0.568. It is 0.586/0.211 = 2.78 times more likely to be the best explanation (hypothesis) for variation in density. When comparing the best model to the third-best model, we get 0.586/0.203 = 2.89 times more likely to be the best explanation (hypothesis).
 
-```{r Royall}
-# select models using Royall's 1/8 rule for strength of evidence
-subset(out.put, 1/8 < weight/max(out.put$weight))
-```
-Using the 1/8 rule for strength of evidence, we can see that the delta values and weights agree with each other.
-
 ```{r adjusting sig digits}
-sel.table<-as.data.frame(out.put)[2:9]
+sel.table<-as.data.frame(out.put)[8:12]
+sel.table[,2:3]<- round(sel.table[,2:3],2)
+sel.table[,4:5]<- round(sel.table[,4:5],3)
+names(sel.table)[1] = "K"
 sel.table$Model<-rownames(sel.table)
-sel.table[,2:3]<- round(sel.table[,2:5],2)
-sel.table[,4:5]<- round(sel.table[,4:5],2)
-names(sel.table)[7] = "K"
-names(sel.table)[5] = "NDVI"
-names(sel.table)[4] = "% Dead Plants"
-names(sel.table)[3] = "% Live Plants"
-names(sel.table)[2] = "% Ground Cover"
-names(sel.table)[1] = "Elevation"
-sel.table$Model<-rownames(sel.table)
-sel.table<-sel.table[,c(9,7,1,2,3,4,5,8)]
 
 sel.table
+
+importance(out.put)
 ```
+Based on these importance values, there seems to be pretty solid evidence for elevation, percent ground cover, and percent live plant cover (weights all equal to one), and they're all included in all 3 top models. These three predictor variables match up with what we saw when dredging the model, although with slightly different levels of confidence.
+
 
 ## Averaging the Models
 
@@ -263,3 +226,32 @@ MA2
 summary(model.avg(dredge_grass2))
 ```
 
+Just taking a look at each predictor variable against the response variable (density):
+```{r, out.width="50%", fig.align="center"}
+g1 <- ggplot(grassmodel, aes(elevation, density, color = elevation)) + 
+  geom_point() +
+  geom_smooth(method="lm") 
+
+g2 <- ggplot(grassmodel, aes(ndvi, density, color = ndvi)) + 
+  geom_point() +
+  geom_smooth(method="lm") 
+
+g3 <- ggplot(grassmodel, aes(live, density, color = live)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+
+g4 <- ggplot(grassmodel, aes(dead, density, color = dead)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+
+g5 <- ggplot(grassmodel, aes(ground, density, color = ground)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+
+g1 
+g2
+g3
+g4
+g5
+```
+Based on the top 3 candidate models, I can now run my linear models including these individual and additive variables.
