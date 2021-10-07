@@ -1,7 +1,7 @@
 <body style="background-color:#e7d5ad"> 
 <center>![caption](images/sitephoto.png){width=80%}</center>
 ---
-title: "Introduction to Model Selection"
+title: "Model Selection"
 #subtitle: Jenna Atma
 output:
   html_document:
@@ -39,7 +39,7 @@ library(patchwork)
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
-Dataset: Harrower, William L.; Srivastava, Diane S.; Turkington, Roy; Fraser, Lauchlan H. (2018), Data from: Temperate grassland songbird species accumulate incrementally along a gradient of primary productivity, Dryad, Dataset, https://doi.org/10.5061/dryad.365dr
+<center>Dataset: Harrower, William L.; Srivastava, Diane S.; Turkington, Roy; Fraser, Lauchlan H. (2018), Data from: Temperate grassland songbird species accumulate incrementally along a gradient of primary productivity, Dryad, Dataset, https://doi.org/10.5061/dryad.365dr</center>
 
 ## Background
 
@@ -65,9 +65,10 @@ Five predictor variables: elevation, NDVI (Normalized Difference Vegetation Inde
 
 Using the pairs function, the multiple competing hypotheses are plotted out, with each hypothesis being represented in a separate model.
 
-```{r fig.height=8, fig.width=8}
-#check for co-linearity among the four predictor variables
-pairs(grass[,5:9], lower.panel = NULL) #use all rows of columns including predictor variables
+```{r, fig.align="center"}
+grassdensity <- grass[, c("density", "elevation", "ndvi", "live", "dead", "ground")]
+
+ggpairs(grassdensity) + theme_bw()
 ```
     
 Elevation and ndvi look closely related, and some of the others look fairly linear, which means they are very likely redundant information representing the same phenomenon.
@@ -84,6 +85,8 @@ performance::check_collinearity(grassmodel)
 ```
 
 All five predictors show a low correlation. 
+
+## Dredging the Model
 
 Next, I'm going to dredge the model to run all possible variable combinations. This helps decide which combos to run actual analysis on. All should add up to "1" (weight). I want to run my analysis on the models that have less than 2.0 model units from the top-rated model (delta 0.0). These ones have the most "competitive explanatory power".
 
@@ -114,26 +117,24 @@ importance(dredge_grass)
 Percent ground cover, percent live plant cover, and elevation all have fairly high-ranking explanatory power, but NDVI and percent dead plant cover aren't too far off. All of them are involved in the same number of models.
 
 Just taking a look at each predictor variable against the response variable (density):
-```{r, out.width="50%"}
+```{r, out.width="50%", fig.align="center"}
 g1 <- ggplot(grassmodel, aes(elevation, density, color = elevation)) + 
   geom_point() +
-  geom_smooth(method="lm") +
-  scale_colour_gradientn(colors = heat.colors(10, rev=TRUE))
+  geom_smooth(method="lm") 
 
 g2 <- ggplot(grassmodel, aes(ndvi, density, color = ndvi)) + 
   geom_point() +
-  geom_smooth(method="lm") +
-  scale_colour_gradientn(colors = terrain.colors(10, rev=TRUE))
+  geom_smooth(method="lm") 
 
-g3 <- ggplot(grassmodel, aes(live, density)) + 
+g3 <- ggplot(grassmodel, aes(live, density, color = live)) + 
   geom_point() +
   geom_smooth(method="lm")
 
-g4 <- ggplot(grassmodel, aes(dead, density)) + 
+g4 <- ggplot(grassmodel, aes(dead, density, color = dead)) + 
   geom_point() +
   geom_smooth(method="lm")
 
-g5 <- ggplot(grassmodel, aes(ground, density)) + 
+g5 <- ggplot(grassmodel, aes(ground, density, color = ground)) + 
   geom_point() +
   geom_smooth(method="lm")
 
@@ -145,17 +146,18 @@ g5
 ```
 Based on the top 3 candidate models, I can now run my linear models including these individual and additive variables.
 
-I'll fit the candidate models that will likely best explain any variation in grassland bird density. Ideally, these models would represent hypotheses. 
-Given the nature of the response, we’ll use ordinary linear regression with the `lm` function.
+## Running the Actual Model
+
+I can fit the candidate models that will likely best explain any variation in grassland bird density. Given the nature of the response, I’ll use ordinary linear regression.
+
 ```{r}
-#First, fit 4 candidate linear models to explain variation in density
 mod1<-lm(density~elevation+ground+live, data = grass)
 mod2<-lm(density~elevation+ground+live+dead, data = grass)
 mod3<-lm(density~elevation+ground+live+ndvi, data = grass)
 ```
-We can now use the `model.sel` function to conduct model selection. The default model selection criteria is Akaike’s information criteria (AIC) with small sample bias adjustment, AIC~c~. Here we’ll create an object `out.put` that contains all of the model selection information.
+
+Using the `model.sel` function, I can do the model selection using Akaike’s information criteria (AIC).
 ```{r}
-# use the model.sel function to conduct model selection
 out.put<-model.sel(mod1,mod2,mod3)
 out.put
 ```
@@ -163,49 +165,94 @@ The models are sorted from best (top) to worst (bottom). Looks like `mod1`, cont
 
 ```{r Royall}
 # select models using Royall's 1/8 rule for strength of evidence
-#https://www.stat.fi/isi99/proceedings/arkisto/varasto/roya0578.pdf
-# IMPORTANT: Weights have been renormalized!!
 subset(out.put, 1/8 < weight/max(out.put$weight))
 ```
 Using the 1/8 rule for strength of evidence, we can see that the delta values and weights agree with each other.
 
-```{r}
-# select models 95% cumulative weight criteria
-# IMPORTANT: Weights have been renormalized!!
-subset(out.put, cumsum(out.put$weight) <= .95)
-```
-0.735/0.265 = model 1 is 2.77% more likely than model 2.
-
 ```{r adjusting sig digits}
-# coerce the object out.put into a data frame
-# elements 6-10 in out.put have what we want
-sel.table<-as.data.frame(out.put)[6:10]
-sel.table
-# how about a little renaming columns to fit proper conventions
-# number of parameters (df) should be K
-names(sel.table)[1] = "K"
-
-## lets be sure to put the model names in a column
+sel.table<-as.data.frame(out.put)[2:9]
 sel.table$Model<-rownames(sel.table)
+sel.table[,2:3]<- round(sel.table[,2:5],2)
+sel.table[,4:5]<- round(sel.table[,4:5],2)
+names(sel.table)[7] = "K"
+names(sel.table)[5] = "NDVI"
+names(sel.table)[4] = "% Dead Plants"
+names(sel.table)[3] = "% Live Plants"
+names(sel.table)[2] = "% Ground Cover"
+names(sel.table)[1] = "Elevation"
+sel.table$Model<-rownames(sel.table)
+sel.table<-sel.table[,c(9,7,1,2,3,4,5,8)]
 
-# let's see what is in there
 sel.table
 ```
 
-```{r reorder columns}
-#little reordering of columns
-sel.table<-sel.table[,c(6,1,2,3,4,5)] #specify order of columns
-sel.table
+## Averaging the Models
+
+```{r}
+MA<-model.avg(out.put, revised.var = TRUE)
+MA
+```
+Model averaging incorporates model selection uncertainty. The parameter estimates for each candidate model are weighted using their corresponding model weights and summed. 
+Two methods for model-averaging: where parameter estimates are averaged over all models in which predictor Xi occurs, and where parameter estimates are averaged over all models, not just those in which predictor Xi occurs.
+MuMIn function model.avg conducts both types of model averaging and reports the first type of model averaging as “subset” and the second type as “full”.
+
+  
+  
+<center>![caption](images/vespersparrow.jpeg){width=80%}</center>
+
+  
+## Visualizing the Data Part 2
+
+Using the same dataset, I'm going to do the same kind of model selection, but looking at my predictor variables and using bird **diversity** as my response variable.
+
+```{r, fig.align="center"}
+grassdiversity <- grass[, c("diversity", "elevation", "ndvi", "live", "dead", "ground")]
+
+ggpairs(grassdiversity) + theme_bw()
 ```
 
-<center>![caption](images/vespersparrow.jpeg){width=90%}</center>
+Elevation looks the most significant, but many of these models look promising.
 
-## Caveats and Limitations to Model Selection
+```{r}
+grassmodel2 <- lm(diversity ~ elevation + ndvi + live + dead + ground, data=grass)
+anova (grassmodel2)
+```
+Only elevation shows significance in an ANOVA of the linear model.
 
-1. Depends on the models included in the candidate set. You can’t identify a model as being the “best” fit to the data if you didn’t include the model to begin with!  
-\
-2. The parameter estimates and predictions arising from the “best” model or set of best models should be biologically meaningful.  
-\
-3. Need to decide whether to use model selection or common inferential statistics (e.g. based on P-values). Techniques that rely on both approaches are possible (e.g. backward variable selection followed by averaging of top models) but are discouraged by some model-selection purists.  
-\
-4. Difficult or impossible to compare models with different assumptions, such as those with different error structures (e.g., Poisson vs. Binomial data).  
+Using the performance-collinearity check function, we can check our data for multicollinearity:
+```{r}
+performance::check_collinearity(grassmodel2)
+```
+
+All five predictors show a low correlation. 
+
+## Dredging the Second Model
+
+```{r}
+options(na.action = "na.fail")
+dredge_grass2<-dredge(grassmodel2)
+dredge_grass2
+```
+There are 32 possible models based on additive combinations of variables (no interaction terms).
+
+I'm going to subset these model and isolate the top competitive model combinations:
+```{r}
+subset(dredge_grass2, delta <2)
+```
+There are 2 models that are equally competitive.
+  
+Checking to see which variables are most influential:
+```{r}
+importance(dredge_grass2)
+```
+Elevation clearly shows the highest-ranking explanatory power. All of them are involved in the same number of models.
+
+## Averaging the Second Model
+
+This time I averaged the dredged model, instead of averaging the actual models like I did for the density models. 
+```{r}
+MA2<-model.avg(dredge_grass2, revised.var = TRUE)
+MA2
+```
+
+
