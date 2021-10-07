@@ -71,8 +71,7 @@ grassdensity <- grass[, c("density", "elevation", "ndvi", "live", "dead", "groun
 ggpairs(grassdensity) + theme_bw()
 ```
     
-Elevation and ndvi look closely related, and some of the others look fairly linear, which means they are very likely redundant information representing the same phenomenon.
-All of the combinations with percent ground cover look promising, so I'll focus on that in my analysis. 
+There's several models in this ggpairs plot that seem to show a high level or collinearity. This might not be a big deal, but we need to consider to what degree variables are co-linear (to what degree do they inform us about the same phenomenon of interest). Elevation, ground cover, and ndvi look closely related, and some of the others look fairly linear, which means they are very likely redundant information representing the same phenomenon.
 
 ```{r}
 grassmodel <- lm(density ~ elevation + ndvi + live + dead + ground, data=grass)
@@ -83,6 +82,8 @@ Using the performance-collinearity check function, we can check our data for mul
 ```{r}
 performance::check_collinearity(grassmodel)
 ```
+Multicollinearity is when you know the effect of one predictor, the value of knowing the other predictor is rather low; thus, one of the predictors doesn’t help much in terms of better understanding the model or predicting the outcome. 
+If multicollinearity is a problem, the model would suggest that the predictors in question don’t seems to be reliably associated with the outcome (low estimates, high standard errors), although these predictors actually are strongly associated with the outcome, i.e. indeed might have strong effect.
 
 All five predictors show a low correlation. 
 
@@ -196,6 +197,10 @@ Model averaging incorporates model selection uncertainty. The parameter estimate
 Two methods for model-averaging: where parameter estimates are averaged over all models in which predictor Xi occurs, and where parameter estimates are averaged over all models, not just those in which predictor Xi occurs.
 MuMIn function model.avg conducts both types of model averaging and reports the first type of model averaging as “subset” and the second type as “full”.
 
+```{r}
+summary(model.avg(out.put))
+```
+  
   
   
 <center>![caption](images/vespersparrow.jpeg){width=80%}</center>
@@ -254,5 +259,7 @@ This time I averaged the dredged model, instead of averaging the actual models l
 MA2<-model.avg(dredge_grass2, revised.var = TRUE)
 MA2
 ```
-
+```{r}
+summary(model.avg(dredge_grass2))
+```
 
